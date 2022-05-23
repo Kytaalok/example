@@ -1,0 +1,54 @@
+def parse_and_insert_cof(data: str) -> dict:
+
+    objects = []
+    try:
+        entries = ndjson.loads(data)
+        for entry in entries:           # iterate over all ndjson lines
+
+            if not validate_cof(entry):
+                return {"error": "Could not validate the COF input '%s'" % entry}
+
+            rrtype = entry['rrtype'].upper()
+            rrname = entry['rrname'].rstrip('.')
+            rdata = [x.rstrip('.') for x in entry['rdata']]
+
+            o = MISPObject(name='passive-dns', standalone=False, comment='created by cof2misp')
+   
+            if 'bailiwick' in entry:
+                o.add_attribute('bailiwick', value=entry['bailiwick'].rstrip('.'), distribution=0)
+
+            if create_specific_attributes:
+                if rrtype in ['A', 'AAAA', 'A6']:                           # address type
+                    # address type
+                    o.add_attribute('rrname_domain', value=rrname, distribution=0)
+                    for r in rdata:
+                        o.add_attribute('rdata_ip', value=r, distribution=0)
+                elif rrtype in ['CNAME', 'DNAME', 'NS']:                    # both sides are domains
+                    o.add_attribute('rrname_domain', value=rrname, distribution=0)
+                    for r in rdata:
+                        o.add_attribute('rdata_domain', value=r, distribution=0)
+                elif rrtype in ['SOA']:                                     # left side is a domain, right side is text
+                    o.add_attribute('rrname_domain', value=rrname, distribution=0)
+
+
+            o.add_attribute('rrname', value=rrname, distribution=0)
+            o.add_attribute('rrtype', value=rrtype, distribution=0)
+            for r in rdata:
+                o.add_attribute('rdata', value=r, distribution=0)
+            o.add_attribute('raw_rdata', value=json.dumps(rdata), distribution=0)       # FIXME: do we need to hex encode it?
+            o.add_attribute('time_first', value=entry['time_first'], distribution=0)
+            o.add_attribute('time_last', value=entry['time_last'], distribution=0)
+            o.first_seen = entry['time_first']      # is this redundant?
+            o.last_seen = entry['time_last']
+
+            for k in ['count', 'sensor_id', 'origin', 'text', 'time_first_ms', 'time_last_ms', 'zone_time_first', 'zone_time_last']:
+                if k in entry and entry[k]:
+                    o.add_attribute(k, value=entry[k], distribution=0)
+
+            objects.append(o.to_json())
+
+        r = {'results': {'Object': [json.loads(o) for o in objects]}}
+    except Exception as ex:
+        misperrors["error"] = "An error occured during parsing of input: '%s'" % (str(ex),)
+        return misperrors
+    return r
