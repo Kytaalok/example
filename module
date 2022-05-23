@@ -46,7 +46,7 @@ def parse_and_insert_cof(data: str) -> dict:
                     o.add_attribute(k, value=entry[k], distribution=0)
 
             objects.append(o.to_json())
-
+#
         r = {'results': {'Object': [json.loads(o) for o in objects]}}
     except Exception as ex:
         misperrors["error"] = "An error occured during parsing of input: '%s'" % (str(ex),)
